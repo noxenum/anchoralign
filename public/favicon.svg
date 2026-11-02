@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- anchoralign mark: T2 frame (sky) and T1 frame (coral) superimposed on a shared anchor point. -->
+  <rect width="32" height="32" rx="7" fill="#161a24"/>
+  <g fill="none" stroke-width="3" stroke-linejoin="round">
+    <rect x="8" y="9" width="16" height="16" rx="3" stroke="#56c2ea"/>
+    <rect x="8" y="9" width="16" height="16" rx="3" stroke="#f0785c" transform="rotate(-16 8 25)"/>
+  </g>
+  <circle cx="8" cy="25" r="3.6" fill="#f6f7fb" stroke="#161a24" stroke-width="2"/>
+</svg>
