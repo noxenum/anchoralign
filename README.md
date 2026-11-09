@@ -6,8 +6,7 @@
 </p>
 
 <p align="center">
-  <b>Structural superimposition of lateral cephalograms, right in your browser.</b><br>
-  Cranial base, mandible and maxilla. No upload, no installation.
+  <b>Structural superimposition of lateral cephalograms in the browser.</b><br>
 </p>
 
 <p align="center">
@@ -18,7 +17,7 @@
 </p>
 
 <p align="center">
-  <a href="https://anchoralign.org">Demo</a> (coming soon) ·
+  <a href="https://anchoralign.org">Demo</a> ·
   <a href="#getting-started">Getting started</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="#license">License</a>
@@ -28,7 +27,7 @@
   <source media="(prefers-color-scheme: dark)" srcset=".github/assets/screenshot-dark.webp">
   <img src=".github/assets/screenshot-light.webp" alt="anchoralign after all three superimpositions: the workflow with ten reference points on the left, the cranial-base overlay in the middle and the results of cranial base, mandible and maxilla on the right.">
 </picture>
-<p align="center"><sub>Shown with a synthetic phantom image. No patient data.</sub></p>
+<p align="center"><sub>Shown with a synthetic phantom image.</sub></p>
 
 > [!IMPORTANT]
 > **Research and education use only. Not a medical device.**
@@ -44,26 +43,6 @@ the cranial base, then the mandible and the maxilla on the cranial-base aligned
 image. For each one you mark reference points on both images; anchoralign
 pre-aligns the images and refines the superimposition automatically by matching
 the image structures around those points.
-
-<table>
-  <tr>
-    <td width="33%" valign="top">
-      <b>Three superimpositions, one workflow</b><br>
-      Ten clicks in total. Mandible and maxilla are superimposed on the
-      cranial-base aligned image, with no export and re-import in between.
-    </td>
-    <td width="33%" valign="top">
-      <b>Automatic refinement</b><br>
-      Normalized cross-correlation on regions of interest around the
-      reference points, with subpixel rotation and translation search.
-    </td>
-    <td width="33%" valign="top">
-      <b>Private by design</b><br>
-      Radiographs are processed entirely on your device. No backend, no
-      upload, no tracking, no third-party requests.
-    </td>
-  </tr>
-</table>
 
 <details>
 <summary><b>All features</b></summary>
@@ -121,19 +100,29 @@ the image structures around those points.
 
 ## How it works
 
-1. **Place landmarks.** Mark the reference points of the current
-   superimposition on the first image (T1) and on the second image (T2).
-2. **Pre-align.** T2 is rotated so its RP1→RP2 line matches T1's, then shifted
-   so both RP1 points coincide. With a single reference point (maxilla) only
-   the shift applies.
-3. **Refine.** Each cycle searches a small rotation and translation, by
-   default jointly as a ring segment about RP1, and keeps a step only if it
-   improves its matching score by more than 0.0001. The loop stops when no step
-   is accepted or the maximum number of cycles is reached.
-4. **Continue.** In three-stage mode, repeat for the mandible and the maxilla
-   on T2 as aligned on the cranial base.
-5. **Compare and export.** Inspect each result in any comparison mode, review
-   the summary and export the results and aligned images.
+The first image is T1, the second T2. For each superimposition you mark
+reference points RP1 and RP2 on both images; RP1B1 is RP1 on T1, RP1B2 is RP1
+on T2, and so on.
+
+| Superimposition | RP1 | RP2 |
+|---|---|---|
+| Cranial base | Walker's point | Cribriform plate |
+| Mandible | Cortical chin | Mandibular canal |
+| Maxilla | Zygomatic process | – |
+
+1. **Place landmarks** on T1 and T2. The alignment starts 3 seconds after the
+   last point, so you can still move a point before it runs.
+2. **Pre-align.** T2 is rotated until its RP1→RP2 line is parallel to T1's,
+   then shifted so RP1B2 lies on RP1B1. The maxilla has only one reference
+   point, so it is only shifted.
+3. **Refine.** Each cycle tries a small rotation and translation and keeps the
+   step only if it raises the normalized cross-correlation (NCC) between
+   regions of interest around the reference points by more than 0.0001. The
+   loop stops when no step is accepted or the cycle limit is reached.
+4. **Continue** with the mandible and the maxilla, which are superimposed on
+   T2 as aligned on the cranial base. You can also run any single
+   superimposition on its own.
+5. **Compare and export** the aligned images and the results.
 
 ## Privacy
 
@@ -146,7 +135,8 @@ browser's `localStorage`; images, landmarks and results are not stored.
 
 ## Getting started
 
-Requirements: Node.js 22.12 or newer.
+Requires Node.js 22.12 or newer. Built with TypeScript, React, Vite and
+OpenCV.js, which runs as WebAssembly in a Web Worker.
 
 ```bash
 npm install
@@ -196,7 +186,7 @@ and share for personal use, research, education and by noncommercial
 organizations.
 
 Commercial use, including integration into commercial products, requires a
-separate license. Contact [licensing@anchoralign.org](mailto:licensing@anchoralign.org).
+separate license. Contact [licensing@noxenum.io](mailto:licensing@noxenum.io).
 
 Third-party components and their licenses are listed in [NOTICE.md](NOTICE.md).
 
