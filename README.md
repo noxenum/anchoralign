@@ -65,8 +65,8 @@ the image structures around those points.
   around both reference points
 - Two rotation strategies: a joint ring-segment search about RP1 (default), or
   rotation about the moving RP2
-- Grayscale or combined grayscale + edge scoring, CLAHE contrast enhancement
-  (on by default)
+- Grayscale or combined grayscale + edge scoring, optional CLAHE contrast
+  enhancement (raw scans by default)
 - Option to keep the pre-alignment only, before or after refinement
 
 **Comparison**
