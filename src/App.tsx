@@ -7,7 +7,6 @@ import { SidePanel } from '@/components/side-panel/SidePanel';
 import { StatusBar } from '@/components/status-bar/StatusBar';
 import { CalibrationInput } from '@/components/top-bar/CalibrationInput';
 import { ImageFileChip } from '@/components/top-bar/ImageFileChip';
-import { PreprocessToggle } from '@/components/top-bar/PreprocessToggle';
 import { ToolbarDivider, TopBar } from '@/components/top-bar/TopBar';
 import { Viewer } from '@/components/viewer/Viewer';
 import { ViewerPrompts } from '@/components/viewer/ViewerPrompts';
@@ -64,13 +63,6 @@ export default function App() {
           warnings={calibration.warnings}
           disabled={busy}
           onCommit={actions.setManualCalibration}
-        />
-        <PreprocessToggle
-          value={ws.preprocessMode}
-          onChange={actions.setPreprocessMode}
-          rawDisabled={busy}
-          claheDisabled={ws.running || !ws.hasImages || !ws.claheReady}
-          claheReady={ws.claheReady}
         />
         <ToolbarDivider />
         <Tooltip content={HELP.preAlignment} placement="bottom">
@@ -162,7 +154,6 @@ export default function App() {
         allDone={ws.allDone}
         settings={settings}
         updateSettings={updateSettings}
-        params={stage.params}
         onParamsChange={actions.setParams}
         onRestoreDefaults={actions.restoreDefaults}
         roi={ws.roi}
@@ -174,6 +165,9 @@ export default function App() {
         calibrationLabel={calibration.label}
         calibrationWarnings={calibration.warnings}
         preprocessMode={ws.preprocessMode}
+        onPreprocessModeChange={actions.setPreprocessMode}
+        preprocessDisabled={busy}
+        claheReady={ws.claheReady}
         exports={{
           exporting: ws.exporting,
           onExportResults: actions.exportResults,

@@ -3,7 +3,7 @@ import { ChartLine, ClipboardList, History, RotateCcw, ScanSearch, SlidersHorizo
 import { InfoTip } from '@/components/common/Tooltip';
 import { HELP } from '@/components/helpText';
 import type { Settings } from '@/lib/settings';
-import type { AlignmentParams, StageDef } from '@/lib/stages';
+import { STAGE_IDS, stageDef, type AlignmentParams, type StageDef, type StageId } from '@/lib/stages';
 import type { StagePhase, WorkflowState } from '@/lib/workflow';
 import type { AlignmentResult, ImagePair, IterationEvent, PreAlignSummary, PreprocessMode, RoiConfig } from '@/types';
 import { HistoryTab } from './HistoryTab';
@@ -38,9 +38,8 @@ type SidePanelProps = {
   allDone: boolean;
   settings: Settings;
   updateSettings: (edits: Partial<Settings>) => void;
-  params: AlignmentParams;
-  onParamsChange: (params: Partial<AlignmentParams>) => void;
-  onRestoreDefaults: () => void;
+  onParamsChange: (id: StageId, params: Partial<AlignmentParams>) => void;
+  onRestoreDefaults: (id: StageId) => void;
   roi: RoiConfig;
   preAlign: PreAlignSummary | null;
   iterations: IterationEvent[];
@@ -50,17 +49,26 @@ type SidePanelProps = {
   calibrationLabel: string;
   calibrationWarnings: string[];
   preprocessMode: PreprocessMode;
+  onPreprocessModeChange: (mode: PreprocessMode) => void;
+  preprocessDisabled: boolean;
+  claheReady: boolean;
   exports: ResultsExports;
   onReset: () => void;
 };
 
 export function SidePanel({
-  workflow, stage, phase, running, allDone, settings, updateSettings, params, onParamsChange, onRestoreDefaults,
-  roi, preAlign, iterations, results, images, pxPerMm, calibrationLabel, calibrationWarnings, preprocessMode, exports, onReset,
+  workflow, stage, phase, running, allDone, settings, updateSettings, onParamsChange, onRestoreDefaults,
+  roi, preAlign, iterations, results, images, pxPerMm, calibrationLabel, calibrationWarnings, preprocessMode,
+  onPreprocessModeChange, preprocessDisabled, claheReady, exports, onReset,
 }: SidePanelProps) {
   const [tab, setTab] = useState<Tab>('settings');
   const bodyRef = useRef<HTMLDivElement>(null);
-  const { rotationMode } = params;
+  const { rotationMode } = workflow.stages[stage.id].params;
+  // The stage whose settings are shown. It follows the active stage, but in
+  // three-stage mode any stage can be picked, including locked ones.
+  const [settingsStageId, setSettingsStageId] = useState<StageId>(stage.id);
+  useEffect(() => { setSettingsStageId(stage.id); }, [stage.id]);
+  const shownStageId = workflow.mode === 'guided' ? settingsStageId : stage.id;
 
   // Follow the workflow: the stage's settings while placing, the log while it
   // runs, its result once done and the summary when all stages are done. An
@@ -117,12 +125,18 @@ export function SidePanel({
         {tab === 'settings' && (
           <fieldset className="settings-fields" disabled={running}>
             <SettingsTab
-              stage={stage}
-              params={params}
-              onParamsChange={onParamsChange}
-              onRestoreDefaults={onRestoreDefaults}
+              stage={stageDef(shownStageId)}
+              params={workflow.stages[shownStageId].params}
+              onParamsChange={(edits) => onParamsChange(shownStageId, edits)}
+              onRestoreDefaults={() => onRestoreDefaults(shownStageId)}
+              stageOptions={workflow.mode === 'guided' ? STAGE_IDS : null}
+              onShowStage={setSettingsStageId}
               settings={settings}
               updateSettings={updateSettings}
+              preprocessMode={preprocessMode}
+              onPreprocessModeChange={onPreprocessModeChange}
+              preprocessDisabled={preprocessDisabled}
+              claheReady={claheReady}
             />
           </fieldset>
         )}

@@ -6,15 +6,24 @@ import { InfoTip, Tooltip } from '@/components/common/Tooltip';
 import { HELP } from '@/components/helpText';
 import { ROI2_PRESETS, ROTATION_MODE_OPTIONS, ROT_RANGE_DEG, SCORE_MODE_OPTIONS, TR_RANGE_MM } from '@/constants';
 import type { Settings } from '@/lib/settings';
-import { isSinglePoint, type AlignmentParams, type StageDef } from '@/lib/stages';
+import { isSinglePoint, stageDef, type AlignmentParams, type StageDef, type StageId } from '@/lib/stages';
+import type { PreprocessMode } from '@/types';
 
 type SettingsTabProps = {
+  // The stage whose settings are shown, which need not be the active stage.
   stage: StageDef;
   params: AlignmentParams;
   onParamsChange: (params: Partial<AlignmentParams>) => void;
   onRestoreDefaults: () => void;
+  // Stages to pick from; null when only one stage is in the workflow.
+  stageOptions: readonly StageId[] | null;
+  onShowStage: (id: StageId) => void;
   settings: Settings;
   updateSettings: (edits: Partial<Settings>) => void;
+  preprocessMode: PreprocessMode;
+  onPreprocessModeChange: (mode: PreprocessMode) => void;
+  preprocessDisabled: boolean;
+  claheReady: boolean;
 };
 
 const THEME_OPTIONS = [
@@ -26,23 +35,59 @@ function isStandard(stage: StageDef, params: AlignmentParams): boolean {
   return (Object.keys(stage.defaults) as (keyof AlignmentParams)[]).every((key) => stage.defaults[key] === params[key]);
 }
 
-export function SettingsTab({ stage, params, onParamsChange, onRestoreDefaults, settings, updateSettings }: SettingsTabProps) {
+export function SettingsTab({
+  stage, params, onParamsChange, onRestoreDefaults, stageOptions, onShowStage, settings, updateSettings,
+  preprocessMode, onPreprocessModeChange, preprocessDisabled, claheReady,
+}: SettingsTabProps) {
   const { rotationMode, roi2W, roi2H } = params;
   const singlePoint = isSinglePoint(stage);
   const standard = isStandard(stage, params);
   return (
     <>
       <div className="section">
+        <div className="section-h"><span>Preprocessing <InfoTip>{HELP.clahe}</InfoTip></span></div>
+        <Segmented
+          aria-label="Preprocessing"
+          value={preprocessMode}
+          onChange={onPreprocessModeChange}
+          disabled={preprocessDisabled}
+          fill
+          options={[
+            { value: 'raw', label: 'Raw', tooltip: 'Use the original scans' },
+            {
+              value: 'clahe',
+              label: 'CLAHE',
+              tooltip: claheReady ? HELP.clahe : 'Available once both images are loaded',
+              disabled: !claheReady,
+            },
+          ]}
+        />
+      </div>
+
+      <div className="section">
         <div className="section-h">
-          <span>Alignment</span>
+          <span>{stageOptions ? 'Superimposition' : stage.name}</span>
           {standard
             ? <span className="h-meta">standard settings</span>
             : (
-              <Tooltip content="Restore the standard settings of this superimposition">
+              <Tooltip content={`Restore the standard settings of the ${stage.name.toLowerCase()} superimposition`}>
                 <button className="link-btn warn" onClick={onRestoreDefaults}><RotateCcw size={12} />modified · restore</button>
               </Tooltip>
             )}
         </div>
+        {stageOptions && (
+          <Segmented
+            aria-label="Superimposition settings shown"
+            value={stage.id}
+            onChange={onShowStage}
+            fill
+            options={stageOptions.map((id) => ({ value: id, label: stageDef(id).name }))}
+          />
+        )}
+      </div>
+
+      <div className="section">
+        <div className="section-h"><span>Alignment</span></div>
         <div className="field-grid">
           <span className="field-label">Scoring <InfoTip>{HELP.score} {params.scoreMode === 'gray' ? HELP.scoreGray : HELP.scoreBlend}</InfoTip></span>
           <Select aria-label="Alignment scoring" value={params.scoreMode} options={SCORE_MODE_OPTIONS}

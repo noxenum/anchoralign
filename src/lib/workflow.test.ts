@@ -62,6 +62,23 @@ describe('three-stage workflow', () => {
     expect(isLocked(state, 'mandible')).toBe(true);
   });
 
+  it('lets a locked stage be configured without touching the active stage', () => {
+    let state = workflowReducer(createWorkflow('guided', 'cranialBase'), { type: 'setParams', stageId: 'mandible', params: { roi1Mm: 24 } });
+    expect(isLocked(state, 'mandible')).toBe(true);
+    expect(state.activeStage).toBe('cranialBase');
+    expect(state.stages.mandible.params.roi1Mm).toBe(24);
+    expect(state.stages.cranialBase.params).toEqual(stageDef('cranialBase').defaults);
+    state = workflowReducer(state, { type: 'restoreDefaults', stageId: 'mandible' });
+    expect(state.stages.mandible.params).toEqual(stageDef('mandible').defaults);
+  });
+
+  it('keeps the cranial base result when another stage is reconfigured', () => {
+    let state = alignCranialBase(createWorkflow('guided', 'cranialBase'));
+    state = workflowReducer(state, { type: 'setParams', stageId: 'maxilla', params: { roi1Mm: 16 } });
+    expect(state.stages.cranialBase.result).not.toBeNull();
+    expect(state.stages.maxilla.params.roi1Mm).toBe(16);
+  });
+
   it('ignores events of a superseded run', () => {
     let state = placeAll(createWorkflow('guided', 'cranialBase'), 'cranialBase');
     state = apply(state,

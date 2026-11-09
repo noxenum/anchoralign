@@ -46,7 +46,7 @@ export function useWorkspace() {
   const { pxPerMm } = calibration;
   const workflow = useWorkflow(settings.workflowMode, settings.singleStage);
   const { state, dispatch } = workflow;
-  const [preprocessMode, setPreprocessModeState] = useState<PreprocessMode>('clahe');
+  const [preprocessMode, setPreprocessModeState] = useState<PreprocessMode>('raw');
   const [showAnnotations, setShowAnnotations] = useState(true);
   const [exporting, setExporting] = useState<string | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -290,8 +290,9 @@ export function useWorkspace() {
       resetSession,
       setMode,
       setActiveStage,
-      setParams: (params: Partial<AlignmentParams>) => { if (!running) dispatch({ type: 'setParams', stageId, params }); },
-      restoreDefaults: () => { if (!running) dispatch({ type: 'restoreDefaults', stageId }); },
+      // Any stage's settings can be edited, not only the active stage's.
+      setParams: (id: StageId, params: Partial<AlignmentParams>) => { if (!running) dispatch({ type: 'setParams', stageId: id, params }); },
+      restoreDefaults: (id: StageId) => { if (!running) dispatch({ type: 'restoreDefaults', stageId: id }); },
       setPreprocessMode: (mode: PreprocessMode) => {
         setPreprocessModeState(mode);
         dispatch({ type: 'clearRuns' });
