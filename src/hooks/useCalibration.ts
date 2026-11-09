@@ -1,37 +1,29 @@
 import { useMemo, useState } from 'react';
-import { DEFAULT_PX_PER_MM } from '@/lib/geometry';
 import {
-  calibrationLabel,
-  calibrationWarnings,
-  nextCalibration,
-  type CalibrationSource,
-  type ImageResolutions,
-} from '@/lib/imageResolution';
-import type { ImagePair } from '@/types';
+  initialCalibration, nextCalibration, resetCalibration, toWorkingScale, withManualScale, workingPxPerMm,
+  type Calibration, type ImageResolutions, type PixelScale,
+} from '@/lib/calibration';
+import type { ImageKey } from '@/types';
 
-// Pixel scale of both images: from image metadata, entered manually or the default.
-export function useCalibration(images: ImagePair) {
-  const [pxPerMm, setPxPerMm] = useState(DEFAULT_PX_PER_MM);
-  const [source, setSource] = useState<CalibrationSource>({ kind: 'default' });
+// Pixel scale of T1 and T2 and the alignment frame derived from them.
+export function useCalibration() {
+  const [calibration, setCalibration] = useState<Calibration>(initialCalibration);
 
-  const warnings = useMemo(() => calibrationWarnings(
-    pxPerMm,
-    source,
-    { t1: images.t1.resolution, t2: images.t2.resolution },
-    !!(images.t1.src || images.t2.src),
-  ), [pxPerMm, source, images.t1.resolution, images.t2.resolution, images.t1.src, images.t2.src]);
+  const frame = useMemo(() => ({
+    // px/mm of the alignment frame, which all mm values refer to.
+    pxPerMm: workingPxPerMm(calibration),
+    // Native pixels of each image → alignment frame scale (null: unchanged).
+    t1Scale: toWorkingScale(calibration, 't1'),
+    t2Scale: toWorkingScale(calibration, 't2'),
+  }), [calibration]);
 
-  // Called with the metadata of the images about to be shown.
-  const applyResolutions = (resolutions: ImageResolutions) => {
-    const next = nextCalibration(source, resolutions);
-    setSource(next);
-    if (next.kind === 'metadata') setPxPerMm(next.resolution.pxPerMm);
+  return {
+    calibration,
+    ...frame,
+    // Called with the metadata of the images about to be shown.
+    applyResolutions: (resolutions: ImageResolutions) => setCalibration((current) => nextCalibration(current, resolutions)),
+    setManual: (images: readonly ImageKey[], scale: Partial<PixelScale>) => setCalibration((current) => withManualScale(current, images, scale)),
+    copyT1ToT2: () => setCalibration((current) => withManualScale(current, ['t2'], current.t1.scale)),
+    reset: (resolutions: ImageResolutions) => setCalibration(resetCalibration(resolutions)),
   };
-
-  const setManual = (value: number) => {
-    setPxPerMm(value);
-    setSource({ kind: 'manual' });
-  };
-
-  return { pxPerMm, label: calibrationLabel(source), warnings, applyResolutions, setManual };
 }

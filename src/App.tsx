@@ -29,7 +29,7 @@ const PHASE_LABELS: Record<StagePhase, string> = {
 
 export default function App() {
   const ws = useWorkspace();
-  const { settings, updateSettings, images, stage, phase, calibration, actions, busy } = ws;
+  const { settings, updateSettings, images, stage, phase, pxPerMm, actions, busy } = ws;
   const [opacity, setOpacity] = useState(0.55);
   const strobe = useStrobe(ws.isOverlayPhase && settings.overlayMode === 'strobe');
   useHotkey('Enter', () => actions.runAlignment(), ws.canRun);
@@ -56,13 +56,15 @@ export default function App() {
           onFile={(file) => actions.loadImageFile('t2', file)} onRemove={() => actions.removeImage('t2')} />
       </>}>
         <CalibrationInput
-          pxPerMm={calibration.pxPerMm}
+          calibration={ws.calibration}
+          pxPerMm={pxPerMm}
           unit={settings.calibrationUnit}
           setUnit={(calibrationUnit) => updateSettings({ calibrationUnit })}
-          sourceLabel={calibration.label}
-          warnings={calibration.warnings}
+          warnings={ws.calibrationNotes}
           disabled={busy}
-          onCommit={actions.setManualCalibration}
+          onSet={actions.setCalibration}
+          onCopyT1ToT2={actions.copyT1CalibrationToT2}
+          onReset={actions.resetCalibration}
         />
         <ToolbarDivider />
         <Tooltip content={HELP.preAlignment} placement="bottom">
@@ -112,7 +114,11 @@ export default function App() {
           images={ws.displayImages}
           points={ws.nativePoints}
           roi={ws.roi}
-          pxPerMm={calibration.pxPerMm}
+          pxPerMm={pxPerMm}
+          t1Transform={ws.t1Scale}
+          t1FrameSize={ws.t1FrameSize}
+          t2FrameSize={ws.t2FrameSize}
+          paneNotes={ws.paneNotes}
           singlePoint={isSinglePoint(ws.stageDef)}
           isOverlayPhase={ws.isOverlayPhase}
           overlayMode={settings.overlayMode}
@@ -161,9 +167,10 @@ export default function App() {
         iterations={stage.iterations}
         results={results}
         images={images}
-        pxPerMm={calibration.pxPerMm}
-        calibrationLabel={calibration.label}
-        calibrationWarnings={calibration.warnings}
+        pxPerMm={pxPerMm}
+        calibration={ws.calibration}
+        calibrationUnit={settings.calibrationUnit}
+        calibrationWarnings={ws.calibrationNotes}
         preprocessMode={ws.preprocessMode}
         onPreprocessModeChange={actions.setPreprocessMode}
         preprocessDisabled={busy}
@@ -182,7 +189,7 @@ export default function App() {
         tone={tone}
         stageLabel={stageLabel}
         transform={ws.t2Transform}
-        pxPerMm={calibration.pxPerMm}
+        pxPerMm={pxPerMm}
         roi1Score={results?.roi1Score ?? lastIteration?.roi1Score ?? ws.preAlign?.roi1Score}
         roi2Score={results?.roi2Score ?? lastIteration?.roi2Score ?? ws.preAlign?.roi2Score}
         preprocessMode={ws.preprocessMode}

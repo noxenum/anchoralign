@@ -38,6 +38,8 @@ export type CephPaneProps = {
   onFileDrop?: (file: File) => void;
   placementGuide?: PlacementArcGuide | null;
   imageSize?: { width: number | null; height: number | null };
+  // Shown after the image size in the corner, e.g. its calibration.
+  cornerNote?: string;
 };
 
 export function CephPane({
@@ -59,6 +61,7 @@ export function CephPane({
   onFileDrop,
   placementGuide,
   imageSize,
+  cornerNote,
 }: CephPaneProps) {
   const paneRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -323,7 +326,7 @@ export function CephPane({
         )}
       </div>
 
-      {imgSrc && <div className="pane-corner">{imageWidth} × {imageHeight} px</div>}
+      {imgSrc && <div className="pane-corner">{imageWidth} × {imageHeight} px{cornerNote ? ` · ${cornerNote}` : ''}</div>}
     </div>
   );
 }

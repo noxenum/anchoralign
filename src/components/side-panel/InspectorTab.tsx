@@ -1,6 +1,10 @@
+import { Fragment } from 'react';
 import { TriangleAlert } from 'lucide-react';
 import { InfoTip } from '@/components/common/Tooltip';
 import { HELP } from '@/components/helpText';
+import {
+  formatScaleValue, IMAGE_KEYS, isSquare, sourceLabel, toWorkingScale, UNIT_LABELS, type Calibration, type CalibrationUnit,
+} from '@/lib/calibration';
 import { alignmentStatus, formatScore } from '@/lib/format';
 import { isSinglePoint, type StageDef } from '@/lib/stages';
 import type { AlignmentResult, ImagePair, PreAlignSummary, PreprocessMode, RoiConfig } from '@/types';
@@ -14,8 +18,10 @@ type InspectorTabProps = {
   preAlign: PreAlignSummary | null;
   results: AlignmentResult | null;
   images: ImagePair;
+  // Scale of the alignment frame.
   pxPerMm: number;
-  calibrationLabel: string;
+  calibration: Calibration;
+  calibrationUnit: CalibrationUnit;
   calibrationWarnings: string[];
   preprocessMode: PreprocessMode;
 };
@@ -23,7 +29,7 @@ type InspectorTabProps = {
 const mm = (value: number) => (Number.isFinite(value) ? value.toFixed(2) : '—');
 
 export function InspectorTab({
-  stage, chained, roi, preAlign, results, images, pxPerMm, calibrationLabel, calibrationWarnings, preprocessMode,
+  stage, chained, roi, preAlign, results, images, pxPerMm, calibration, calibrationUnit, calibrationWarnings, preprocessMode,
 }: InspectorTabProps) {
   return (
     <>
@@ -46,10 +52,24 @@ export function InspectorTab({
       <div className="section">
         <div className="section-h"><span>Input</span>{chained && <span className="h-meta">T2 aligned on cranial base</span>}</div>
         <div className="kv">
-          <div className="k">T1</div><div className="v ellipsis">{images.t1.width ?? '—'} × {images.t1.height ?? '—'} px</div>
-          <div className="k">T2</div><div className="v ellipsis">{images.t2.width ?? '—'} × {images.t2.height ?? '—'} px</div>
-          <div className="k">Calibration</div>
-          <div className={`v ${calibrationWarnings.length ? 'warn' : ''}`}>{pxPerMm.toFixed(2)} px/mm · {calibrationLabel}</div>
+          {IMAGE_KEYS.map((key) => {
+            const { scale, source } = calibration[key];
+            const other: CalibrationUnit = calibrationUnit === 'dpi' ? 'pxmm' : 'dpi';
+            const changed = !!toWorkingScale(calibration, key);
+            return (
+              <Fragment key={key}>
+                <div className="k">{key.toUpperCase()}</div>
+                <div className="v ellipsis">{images[key].width ?? '—'} × {images[key].height ?? '—'} px</div>
+                <div className="k">↳ {UNIT_LABELS[calibrationUnit]} · {sourceLabel(source)}</div>
+                <div className={`v ${isSquare(scale) ? '' : 'warn'}`}>{formatScaleValue(scale, calibrationUnit)}</div>
+                <div className="k">↳ {UNIT_LABELS[other]}</div>
+                <div className="v muted">{formatScaleValue(scale, other)}</div>
+                {changed && <><div className="k">↳ alignment</div><div className="v warn">{key === 't1' ? 'resampled to square pixels' : 'rescaled to T1'}</div></>}
+              </Fragment>
+            );
+          })}
+          <div className="k">Alignment scale</div>
+          <div className={`v ${calibrationWarnings.length ? 'warn' : ''}`}>{pxPerMm.toFixed(3)} px/mm</div>
           <div className="k">Preprocessing</div><div className="v">{preprocessMode === 'clahe' ? 'CLAHE' : 'Raw'}</div>
           <div className="k">ROI₁</div><div className="v">{roi.rp1.w} × {roi.rp1.h} mm</div>
           {!isSinglePoint(stage) && <><div className="k">ROI₂</div><div className="v">{roi.rp2.w} × {roi.rp2.h} mm</div></>}

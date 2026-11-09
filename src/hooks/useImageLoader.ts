@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CephEngine } from '@/engine/engineClient';
 import type { ImageResolution } from '@/lib/imageResolution';
-import type { ImageKey, ImagePair } from '@/types';
+import type { Affine6, ImageKey, ImagePair } from '@/types';
 
 const EMPTY_IMAGES: ImagePair = {
   t1: { src: null, claheSrc: null, name: 'No T1 image loaded', width: null, height: null, resolution: null },
@@ -10,7 +10,8 @@ const EMPTY_IMAGES: ImagePair = {
 
 // Holds the two uploaded images as object URLs. Once both are present the
 // worker decodes them and reports their native size and CLAHE previews.
-export function useImageLoader(engine: CephEngine | null) {
+// `t1Scale` resamples T1 into the alignment frame (null: native pixels).
+export function useImageLoader(engine: CephEngine | null, t1Scale: Affine6 | null) {
   const [images, setImages] = useState(EMPTY_IMAGES);
   const [claheReady, setClaheReady] = useState(false);
   // Settles when the worker holds the current images.
@@ -38,6 +39,8 @@ export function useImageLoader(engine: CephEngine | null) {
 
   const hasImages = !!(images.t1.src && images.t2.src);
   const hasGeometry = !!(images.t1.width && images.t1.height && images.t2.width && images.t2.height);
+  const t1ScaleX = t1Scale?.[0] ?? 1;
+  const t1ScaleY = t1Scale?.[4] ?? 1;
 
   useEffect(() => {
     if (!engine || !hasImages) {
@@ -45,7 +48,7 @@ export function useImageLoader(engine: CephEngine | null) {
       return;
     }
     let stale = false;
-    loaded.current = engine.loadImages(images.t1.src, images.t2.src).then((payload) => {
+    loaded.current = engine.loadImages(images.t1.src, images.t2.src, [t1ScaleX, t1ScaleY]).then((payload) => {
       if (stale) return payload;
       const t1ClaheUrl = createObjectUrl(payload.claheT1);
       const t2ClaheUrl = createObjectUrl(payload.claheT2);
@@ -64,7 +67,7 @@ export function useImageLoader(engine: CephEngine | null) {
       throw err;
     });
     return () => { stale = true; };
-  }, [engine, images.t1.src, images.t2.src, hasImages]);
+  }, [engine, images.t1.src, images.t2.src, hasImages, t1ScaleX, t1ScaleY]);
 
   const setImage = (key: ImageKey, file: File, resolution: ImageResolution | null) => {
     const src = createObjectUrl(file);

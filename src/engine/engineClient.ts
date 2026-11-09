@@ -35,9 +35,10 @@ export type AlignHandlers = {
 };
 
 export type LoadImagesResult = {
+  // Native sizes.
   t1: ImageSize;
   t2: ImageSize;
-  // CLAHE-enhanced previews of both images as PNG.
+  // CLAHE-enhanced previews of both images as PNG, at native size.
   claheT1: Blob;
   claheT2: Blob;
 };
@@ -54,9 +55,10 @@ export class CephEngine {
     });
   }
 
-  async loadImages(t1Url: string, t2Url: string): Promise<LoadImagesResult> {
+  // `t1Scale` resamples T1 by x and y into the alignment frame; [1, 1] keeps it.
+  async loadImages(t1Url: string, t2Url: string, t1Scale: [number, number] = [1, 1]): Promise<LoadImagesResult> {
     await this.ready;
-    return this.request({ type: 'loadImages', payload: { t1Url, t2Url } }, 'imagesLoaded');
+    return this.request({ type: 'loadImages', payload: { t1Url, t2Url, t1Scale } }, 'imagesLoaded');
   }
 
   async align(request: AlignRequest, handlers: AlignHandlers = {}): Promise<AlignmentResult> {

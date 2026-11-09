@@ -1,8 +1,6 @@
 // Reads the pixel density stored in image metadata (JPEG EXIF/JFIF, PNG pHYs,
 // WebP EXIF) so the px/mm calibration can be pre-filled from the scan itself.
 
-import type { ImageKey } from '@/types';
-
 export type ResolutionTag = 'EXIF' | 'JFIF' | 'PNG';
 
 export interface ImageResolution {
@@ -173,78 +171,4 @@ function readWebp(view: DataView): ImageResolution | null {
     offset = data + length + (length % 2);
   }
   return null;
-}
-
-// ---------- Calibration source ----------
-
-export type CalibrationSource =
-  | { kind: 'default' }
-  | { kind: 'manual' }
-  | { kind: 'kept' }
-  | { kind: 'metadata'; image: ImageKey; resolution: ImageResolution };
-
-export type ImageResolutions = Partial<Record<ImageKey, ImageResolution | null>>;
-
-// T1 is the reference image, so its metadata wins over T2's.
-export function metadataCalibration(resolutions: ImageResolutions): CalibrationSource | null {
-  for (const image of ['t1', 't2'] as const) {
-    const resolution = resolutions[image];
-    if (resolution && !resolution.placeholder) return { kind: 'metadata', image, resolution };
-  }
-  return null;
-}
-
-// Decides the calibration after an image (re)load. A manually entered value is
-// never overridden.
-export function nextCalibration(current: CalibrationSource, resolutions: ImageResolutions): CalibrationSource {
-  if (current.kind === 'manual') return current;
-  const fromMetadata = metadataCalibration(resolutions);
-  if (fromMetadata) return fromMetadata;
-  return current.kind === 'metadata' ? { kind: 'kept' } : current;
-}
-
-export function calibrationLabel(source: CalibrationSource): string {
-  switch (source.kind) {
-    case 'metadata': return `${source.resolution.tag} ${source.image.toUpperCase()}`;
-    case 'manual': return 'manual';
-    case 'kept': return 'kept';
-    default: return 'default';
-  }
-}
-
-function formatDpi(dpi: number): string {
-  return `${Number(dpi.toFixed(1))} dpi`;
-}
-
-export function calibrationWarnings(pxPerMm: number, source: CalibrationSource, resolutions: ImageResolutions, hasImages: boolean): string[] {
-  const warnings: string[] = [];
-  const usable: Partial<Record<ImageKey, ImageResolution>> = {};
-  for (const image of ['t1', 't2'] as const) {
-    const resolution = resolutions[image];
-    if (!resolution) continue;
-    const name = image.toUpperCase();
-    if (resolution.placeholder) {
-      warnings.push(`${name} metadata ${formatDpi(resolution.dpiX)} ignored (common placeholder value).`);
-      continue;
-    }
-    usable[image] = resolution;
-    // Exporters round the two rationals differently (205.98 vs 206), so only
-    // flag a real difference.
-    if (Math.abs(resolution.dpiX - resolution.dpiY) / resolution.dpiX > 0.005) {
-      warnings.push(`${name} has non-square pixels (${formatDpi(resolution.dpiX)} × ${formatDpi(resolution.dpiY)}); the x value is used.`);
-    }
-    if (Math.abs(resolution.pxPerMm - pxPerMm) / pxPerMm > 0.005) {
-      warnings.push(`${name} metadata says ${formatDpi(resolution.dpiX)} (${resolution.pxPerMm.toFixed(2)} px/mm), not the ${pxPerMm.toFixed(2)} px/mm in use.`);
-    }
-  }
-  if (usable.t1 && usable.t2 && Math.abs(usable.t1.pxPerMm - usable.t2.pxPerMm) / usable.t1.pxPerMm > 0.005) {
-    warnings.push('T1 and T2 have different resolutions, but one scale is used for both images.');
-  }
-  if (hasImages && source.kind === 'default') {
-    warnings.push(`No resolution in the image metadata; using the default ${pxPerMm.toFixed(2)} px/mm.`);
-  }
-  if (source.kind === 'kept') {
-    warnings.push('Kept from a previously loaded image; the current images carry no usable resolution.');
-  }
-  return warnings;
 }

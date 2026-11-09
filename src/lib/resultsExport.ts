@@ -1,5 +1,6 @@
+import type { PixelScale } from '@/lib/calibration';
 import type { AlignmentParams, StageDef } from '@/lib/stages';
-import type { AlignmentResult, PreprocessMode } from '@/types';
+import type { AlignmentResult, ImageKey, PreprocessMode } from '@/types';
 
 export type StageResultRow = {
   stage: StageDef;
@@ -12,8 +13,9 @@ export type StageResultRow = {
 export type ResultsContext = {
   t1Name: string;
   t2Name: string;
+  // Scale of the alignment frame, which all mm values refer to.
   pxPerMm: number;
-  calibrationSource: string;
+  calibration: Record<ImageKey, { scale: PixelScale; source: string }>;
   preprocessMode: PreprocessMode;
   version: string;
   exportedAt: Date;
@@ -23,7 +25,8 @@ const COLUMNS = [
   'superimposition', 'relative_to', 'rotation_deg', 'rp1b2_dx_mm', 'rp1b2_dy_mm', 'rp1b2_displacement_mm',
   'alignment_score', 'roi1_score', 'roi2_score', 'status', 'cycles',
   'score_mode', 'rotation_search', 'roi1_mm', 'roi2_w_mm', 'roi2_h_mm', 'rotation_step_deg', 'translation_step_mm', 'max_cycles',
-  'preprocessing', 'px_per_mm', 'calibration_source', 't1_image', 't2_image', 'app_version', 'exported_at',
+  'preprocessing', 'px_per_mm',
+  't1_px_per_mm_x', 't1_px_per_mm_y', 't1_calibration', 't2_px_per_mm_x', 't2_px_per_mm_y', 't2_calibration', 't1_image', 't2_image', 'app_version', 'exported_at',
 ];
 
 function csvCell(value: string | number | null | undefined): string {
@@ -49,7 +52,11 @@ export function resultsCsv(rows: StageResultRow[], context: ResultsContext): str
     fixed(result.score), fixed(result.roi1Score), fixed(result.roi2Score), status(result), result.cyclesRun,
     params.scoreMode === 'blend' ? '40% gray / 60% edge' : 'gray', params.rotationMode === 'ring' ? 'ring segment' : 'moving centre',
     params.roi1Mm, params.roi2W, params.roi2H, params.stepDeg, params.stepMm, params.maxCycles,
-    context.preprocessMode, fixed(context.pxPerMm), context.calibrationSource,
+    context.preprocessMode, fixed(context.pxPerMm),
+    ...(['t1', 't2'] as const).flatMap((key) => {
+      const { scale, source } = context.calibration[key];
+      return [fixed(scale.x), fixed(scale.y), source];
+    }),
     context.t1Name, context.t2Name, context.version, context.exportedAt.toISOString(),
   ].map(csvCell).join(','));
   return [COLUMNS.join(','), ...lines].join('\r\n') + '\r\n';

@@ -10,7 +10,11 @@ const result = {
 } as AlignmentResult;
 
 const context = {
-  t1Name: 'case-01-T1.jpg', t2Name: 'scan "2", final.png', pxPerMm: 8.11, calibrationSource: 'EXIF T1',
+  t1Name: 'case-01-T1.jpg', t2Name: 'scan "2", final.png', pxPerMm: 8.11,
+  calibration: {
+    t1: { scale: { x: 8.11, y: 8.11 }, source: 'EXIF T1' },
+    t2: { scale: { x: 7.95, y: 7.8 }, source: 'manual' },
+  },
   preprocessMode: 'raw' as const, version: '0.1.0', exportedAt: new Date('2026-11-02T10:00:00Z'),
 };
 
@@ -23,7 +27,7 @@ describe('results CSV', () => {
     expect(header.split(',').slice(0, 7)).toEqual([
       'superimposition', 'relative_to', 'rotation_deg', 'rp1b2_dx_mm', 'rp1b2_dy_mm', 'rp1b2_displacement_mm', 'alignment_score',
     ]);
-    expect(row.startsWith('Cranial base,T1,-4.7012,-2.4000,0.1700,2.4060,0.9221,0.9409,,converged,3,gray,ring segment,10,3,10,0.01,0.01,4,raw,8.1100,EXIF T1')).toBe(true);
+    expect(row.startsWith('Cranial base,T1,-4.7012,-2.4000,0.1700,2.4060,0.9221,0.9409,,converged,3,gray,ring segment,10,3,10,0.01,0.01,4,raw,8.1100,8.1100,8.1100,EXIF T1,7.9500,7.8000,manual,case-01-T1.jpg')).toBe(true);
   });
 
   it('quotes cells with commas and quotes', () => {

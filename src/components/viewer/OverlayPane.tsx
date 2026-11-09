@@ -2,7 +2,7 @@ import { useRef, type CSSProperties } from 'react';
 import { useFittedFrame } from '@/hooks/useFittedFrame';
 import { affineToCssTransform, applyAffine, markerRadius } from '@/lib/geometry';
 import type { OverlayMode } from '@/lib/settings';
-import type { Affine6, ImagePair, LandmarkDraft, Point, RoiConfig } from '@/types';
+import type { Affine6, ImagePair, ImageSize, LandmarkDraft, Point, RoiConfig } from '@/types';
 import { FALLBACK_IMAGE_SIZE } from './CephPane';
 
 type OverlayPaneProps = {
@@ -11,6 +11,9 @@ type OverlayPaneProps = {
   roi: RoiConfig;
   // Only one reference point per image: RP2 coincides with RP1 and is not drawn.
   singlePoint: boolean;
+  // Native T1 → alignment frame (null: T1 as it is) and that frame's size.
+  t1Transform: Affine6 | null;
+  frameSize: ImageSize;
   t2Transform: Affine6 | null;
   showAnnotations: boolean;
   strobeFrame: 't1' | 't2';
@@ -20,14 +23,16 @@ type OverlayPaneProps = {
 };
 
 // T1 with the aligned T2 on top, combined according to the overlay mode.
-export function OverlayPane({ mode, points, roi, singlePoint, t2Transform, showAnnotations, strobeFrame, opacity, images, pxPerMm }: OverlayPaneProps) {
-  const t1Width = images.t1.width ?? FALLBACK_IMAGE_SIZE.width;
-  const t1Height = images.t1.height ?? FALLBACK_IMAGE_SIZE.height;
+export function OverlayPane({ mode, points: nativePoints, roi, singlePoint, t1Transform, frameSize, t2Transform, showAnnotations, strobeFrame, opacity, images, pxPerMm }: OverlayPaneProps) {
+  // The frame is T1 at the alignment scale; T1 fills it.
+  const { width: t1Width, height: t1Height } = frameSize;
   const t2Width = images.t2.width ?? FALLBACK_IMAGE_SIZE.width;
   const t2Height = images.t2.height ?? FALLBACK_IMAGE_SIZE.height;
   const paneRef = useRef<HTMLDivElement>(null);
   const frameRect = useFittedFrame(paneRef, t1Width / t1Height);
 
+  const t1At = (p: Point | null) => (p && t1Transform ? applyAffine(t1Transform, p) : p);
+  const points = { t1: { rp1: t1At(nativePoints.t1.rp1), rp2: t1At(nativePoints.t1.rp2) }, t2: nativePoints.t2 };
   const moved = (p: Point | null) => (p && t2Transform ? applyAffine(t2Transform, p) : p);
   const rp1B2After = moved(points.t2.rp1);
   const rp2B2After = singlePoint ? null : moved(points.t2.rp2);

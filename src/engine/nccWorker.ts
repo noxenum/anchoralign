@@ -38,6 +38,19 @@ fetch(OPENCV_RUNTIME_URL)
     });
   });
 
+// Decoded images at native size, kept while the same files are loaded.
+type NativeImages = {
+  t1Raw: any;
+  t1Clahe: any;
+  t2Raw: any;
+  t2Clahe: any;
+  t2EdgeRaw: any;
+  t2EdgeClahe: any;
+  t2Validity: any;
+};
+
+// Images as matched: T1 in the alignment frame (resampled when its pixels are
+// not square), T2 native and mapped through T2_BASE.
 type LoadedImages = {
   t1Raw: any;
   t2Raw: any;
@@ -50,18 +63,28 @@ type LoadedImages = {
   t2Validity: any;
 };
 
-let images: LoadedImages | null = null;
+let natives: NativeImages | null = null;
+let nativeKey = '';
 let previews: { t1: Blob; t2: Blob } | null = null;
-let imageCacheKey = '';
+let images: LoadedImages | null = null;
+let imagesKey = '';
+// Mats created for `images` alone; the others belong to `natives`.
+let ownedMats: any[] = [];
 let PX_PER_MM = DEFAULT_PX_PER_MM;
 let activeScoreMode = 'gray';
 // Transform from native T2 into the frame of points.t2 (null: native T2).
 let T2_BASE: Affine6 | null = null;
+// Loads run one after another: a rescale can arrive while the images decode.
+let loadQueue: Promise<unknown> = Promise.resolve();
 
 ctx.onmessage = async (event) => {
   const { type, payload } = event.data ?? {};
   try {
-    if (type === 'loadImages') await loadImages(payload);
+    if (type === 'loadImages') {
+      const job = loadQueue.then(() => loadImages(payload));
+      loadQueue = job.catch(() => {});
+      await job;
+    }
     if (type === 'align') await align(payload);
   } catch (err) {
     ctx.postMessage({
@@ -71,38 +94,69 @@ ctx.onmessage = async (event) => {
   }
 };
 
-async function loadImages({ t1Url, t2Url }) {
-  const nextKey = `${t1Url}|${t2Url}`;
-  if (!images || nextKey !== imageCacheKey) {
+async function loadImages({ t1Url, t2Url, t1Scale = [1, 1] }) {
+  const nextNativeKey = `${t1Url}|${t2Url}`;
+  if (!natives || nextNativeKey !== nativeKey) {
     deleteImages();
     const [t1Raw, t2Raw] = await Promise.all([fetchAsGrayMat(t1Url), fetchAsGrayMat(t2Url)]);
     const t2Validity = new cv.Mat(t2Raw.rows, t2Raw.cols, cv.CV_8UC1);
     t2Validity.data.fill(255);
     const t1Clahe = applyClahe(t1Raw);
     const t2Clahe = applyClahe(t2Raw);
-    images = {
+    natives = {
       t1Raw,
-      t2Raw,
       t1Clahe,
+      t2Raw,
       t2Clahe,
-      t1EdgeRaw: gradientMagnitude(t1Raw),
       t2EdgeRaw: gradientMagnitude(t2Raw),
-      t1EdgeClahe: gradientMagnitude(t1Clahe),
       t2EdgeClahe: gradientMagnitude(t2Clahe),
       t2Validity,
     };
     previews = { t1: await matToPng(t1Clahe), t2: await matToPng(t2Clahe) };
-    imageCacheKey = nextKey;
+    nativeKey = nextNativeKey;
+  }
+  const [sx, sy] = t1Scale;
+  const nextImagesKey = `${nativeKey}|${sx}|${sy}`;
+  if (!images || nextImagesKey !== imagesKey) {
+    deleteWorkingImages();
+    const own = (mat) => { ownedMats.push(mat); return mat; };
+    const resampled = sx !== 1 || sy !== 1;
+    const t1Raw = resampled ? own(resample(natives.t1Raw, sx, sy)) : natives.t1Raw;
+    const t1Clahe = resampled ? own(resample(natives.t1Clahe, sx, sy)) : natives.t1Clahe;
+    images = {
+      t1Raw,
+      t2Raw: natives.t2Raw,
+      t1Clahe,
+      t2Clahe: natives.t2Clahe,
+      t1EdgeRaw: own(gradientMagnitude(t1Raw)),
+      t2EdgeRaw: natives.t2EdgeRaw,
+      t1EdgeClahe: own(gradientMagnitude(t1Clahe)),
+      t2EdgeClahe: natives.t2EdgeClahe,
+      t2Validity: natives.t2Validity,
+    };
+    imagesKey = nextImagesKey;
   }
   ctx.postMessage({
     type: 'imagesLoaded',
     payload: {
-      t1: { width: images.t1Raw.cols, height: images.t1Raw.rows },
-      t2: { width: images.t2Raw.cols, height: images.t2Raw.rows },
+      t1: { width: natives.t1Raw.cols, height: natives.t1Raw.rows },
+      t2: { width: natives.t2Raw.cols, height: natives.t2Raw.rows },
       claheT1: previews.t1,
       claheT2: previews.t2,
     },
   });
+}
+
+// Scales an image by sx, sy with the same pixel mapping as the T2 warps.
+function resample(src, sx, sy) {
+  const M = cv.matFromArray(2, 3, cv.CV_64F, [sx, 0, 0, 0, sy, 0]);
+  const out = new cv.Mat();
+  try {
+    cv.warpAffine(src, out, M, new cv.Size(Math.round(src.cols * sx), Math.round(src.rows * sy)), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar(0));
+  } finally {
+    M.delete();
+  }
+  return out;
 }
 
 async function fetchAsGrayMat(url) {
@@ -1201,8 +1255,17 @@ function yieldToBrowser() {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function deleteImages() {
-  if (images) for (const mat of Object.values(images)) mat.delete();
+function deleteWorkingImages() {
+  for (const mat of ownedMats) mat.delete();
+  ownedMats = [];
   images = null;
+  imagesKey = '';
+}
+
+function deleteImages() {
+  deleteWorkingImages();
+  if (natives) for (const mat of Object.values(natives)) mat.delete();
+  natives = null;
+  nativeKey = '';
   previews = null;
 }

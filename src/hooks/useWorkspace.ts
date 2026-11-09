@@ -1,8 +1,12 @@
 import { useMemo, useState } from 'react';
+import { FALLBACK_IMAGE_SIZE } from '@/components/viewer/CephPane';
 import { AUTO_RUN_DELAY_MS, ROT_RANGE_DEG, TR_RANGE_MM } from '@/constants';
 import {
   computePreAlignMatrix, createRp2B2PlacementGuide, IDENTITY, mul23, preAlignGeometry, transformDraftPair,
 } from '@/lib/geometry';
+import {
+  calibrationWarnings, formatScale, IMAGE_KEYS, scaledSize, sourceLabel, type PixelScale,
+} from '@/lib/calibration';
 import { baseName, downloadBlob, exportAlignedImage } from '@/lib/imageExport';
 import { readFileResolution } from '@/lib/imageResolution';
 import { activeLandmark, countPlaced, isComplete } from '@/lib/landmarks';
@@ -15,22 +19,34 @@ import { useEngine } from './useEngine';
 import { useImageLoader } from './useImageLoader';
 import { useSettings } from './useSettings';
 import { useWorkflow } from './useWorkflow';
-import type { Affine6, ImageKey, LandmarkDraft, LandmarkKey, Point, PreAlignSummary, PreprocessMode } from '@/types';
+import type { Affine6, ImageKey, ImageSize, LandmarkDraft, LandmarkKey, Point, PreAlignSummary, PreprocessMode } from '@/types';
 
 const FILE_SLUGS: Record<StageId, string> = { cranialBase: 'cranial-base', mandible: 'mandible', maxilla: 'maxilla' };
 
-// Landmarks in the stage's frame: T2 mapped through the stage base.
-function framePoints(points: LandmarkDraft, base: Affine6 | null): LandmarkDraft {
-  return base ? { t1: points.t1, t2: transformDraftPair(base, points.t2) } : points;
+
+// Landmarks in the stage's frame: T1 at the alignment scale, T2 mapped through
+// the stage base.
+function framePoints(points: LandmarkDraft, t1Scale: Affine6 | null, base: Affine6 | null): LandmarkDraft {
+  return {
+    t1: t1Scale ? transformDraftPair(t1Scale, points.t1) : points.t1,
+    t2: base ? transformDraftPair(base, points.t2) : points.t2,
+  };
+}
+
+const compose = (a: Affine6 | null, b: Affine6 | null): Affine6 | null => (a && b ? mul23(a, b) : a ?? b);
+
+// Native T2 -> the stage's T2 frame: rescaled to T1's scale, then, in chained
+// stages, aligned on the cranial base.
+function stageFrame(state: WorkflowState, id: StageId, t2Scale: Affine6 | null): Affine6 | null {
+  return compose(stageBase(state, id), t2Scale);
 }
 
 // Transform from native T2 onto T1 of a stage's result: its own result after the
-// cranial-base result it builds on.
-function resultTransform(state: WorkflowState, id: StageId): Affine6 | null {
+// frame it builds on.
+function resultTransform(state: WorkflowState, id: StageId, t2Scale: Affine6 | null): Affine6 | null {
   const result = state.stages[id].result;
   if (!result) return null;
-  const base = stageBase(state, id);
-  return base ? mul23(result.matrix, base) : result.matrix;
+  return compose(result.matrix, stageFrame(state, id, t2Scale));
 }
 
 // Workspace state and actions: images, calibration and the superimposition
@@ -40,10 +56,10 @@ function resultTransform(state: WorkflowState, id: StageId): Affine6 | null {
 export function useWorkspace() {
   const [settings, updateSettings] = useSettings();
   const engine = useEngine();
-  const imageLoader = useImageLoader(engine);
+  const calibration = useCalibration();
+  const { pxPerMm, t1Scale, t2Scale } = calibration;
+  const imageLoader = useImageLoader(engine, t1Scale);
   const { images } = imageLoader;
-  const calibration = useCalibration(images);
-  const { pxPerMm } = calibration;
   const workflow = useWorkflow(settings.workflowMode, settings.singleStage);
   const { state, dispatch } = workflow;
   const [preprocessMode, setPreprocessModeState] = useState<PreprocessMode>('raw');
@@ -58,7 +74,8 @@ export function useWorkspace() {
   const running = STAGE_IDS.some((id) => state.stages[id].running);
   const busy = running || !!exporting;
   const roi = useMemo(() => roiConfig(stage.params), [stage.params]);
-  const base = stageBase(state, stageId);
+  const base = stageFrame(state, stageId, t2Scale);
+  const chained = !!stageBase(state, stageId);
   const effectivePreprocessMode: PreprocessMode = preprocessMode === 'clahe' && imageLoader.claheReady ? 'clahe' : 'raw';
   const isOverlayPhase = phase === 'ready' || phase === 'running' || phase === 'done';
 
@@ -70,7 +87,7 @@ export function useWorkspace() {
     };
   }, [images, effectivePreprocessMode]);
 
-  const points = useMemo(() => framePoints(stage.points, base), [stage.points, base]);
+  const points = useMemo(() => framePoints(stage.points, t1Scale, base), [stage.points, t1Scale, base]);
   const { preAlignEvent } = stage;
   const preAlign = useMemo<PreAlignSummary | null>(() => {
     if (!isComplete(points)) return null;
@@ -95,6 +112,28 @@ export function useWorkspace() {
   const canRun = !!engine && imageLoader.hasImages && imageLoader.hasGeometry && !busy &&
     (phase === 'ready' || phase === 'done');
   const canExportT1 = !!(images.t1.src && images.t1.width && images.t1.height);
+
+  // Native sizes, and T1 in the alignment frame.
+  const nativeSize = (key: ImageKey): ImageSize => (
+    images[key].width && images[key].height ? { width: images[key].width, height: images[key].height } : FALLBACK_IMAGE_SIZE
+  );
+  const t1FrameSize = scaledSize(nativeSize('t1'), t1Scale);
+  // T2 is shown in T1's frame once transformed onto it; otherwise only rescaled.
+  const t2FrameSize = isOverlayPhase || chained ? t1FrameSize : scaledSize(nativeSize('t2'), t2Scale);
+
+  const resolutions = { t1: images.t1.resolution, t2: images.t2.resolution };
+  const hasT1 = !!images.t1.src;
+  const hasT2 = !!images.t2.src;
+  const calibrationNotes = useMemo(
+    () => calibrationWarnings(calibration.calibration, { t1: images.t1.resolution, t2: images.t2.resolution }, { t1: hasT1, t2: hasT2 }),
+    [calibration.calibration, images.t1.resolution, images.t2.resolution, hasT1, hasT2],
+  );
+  // Calibration of each image as shown in the corner of its pane.
+  const paneNotes = Object.fromEntries(IMAGE_KEYS.map((key) => {
+    const scaled = key === 't1' ? t1Scale : t2Scale;
+    const note = key === 't1' ? 'resampled' : 'rescaled to T1';
+    return [key, `${formatScale(calibration.calibration[key].scale, settings.calibrationUnit)}${scaled ? ` · ${note}` : ''}`];
+  })) as Record<ImageKey, string>;
 
   const runAlignment = (refinement = true) => {
     if (!canRun || !imageLoader.loaded.current || !isComplete(points)) return;
@@ -143,23 +182,24 @@ export function useWorkspace() {
     }
   };
 
-  // T1 defines the reference frame; it is exported with its original pixels.
+  // T1 defines the reference frame; it is exported with its original pixels,
+  // resampled only when they are not square.
   const exportT1 = () => withExport('t1', () => {
     if (!canExportT1) return;
-    return exportAlignedImage(images.t1.src, `${baseName(images.t1.name)}-T1.png`, IDENTITY, images.t1, pxPerMm);
+    return exportAlignedImage(images.t1.src, `${baseName(images.t1.name)}-T1.png`, t1Scale ?? IDENTITY, t1FrameSize, pxPerMm);
   });
 
   const exportAlignedT2 = (id: StageId) => withExport(id, () => {
-    const matrix = resultTransform(state, id);
+    const matrix = resultTransform(state, id, t2Scale);
     if (!matrix || !images.t2.src || !canExportT1) return;
-    return exportAlignedImage(images.t2.src, `${baseName(images.t2.name)}-aligned-${FILE_SLUGS[id]}.png`, matrix, images.t1, pxPerMm);
+    return exportAlignedImage(images.t2.src, `${baseName(images.t2.name)}-aligned-${FILE_SLUGS[id]}.png`, matrix, t1FrameSize, pxPerMm);
   });
 
   const exportAllAlignedT2 = () => withExport('images', async () => {
     for (const id of visibleStages(state)) {
-      const matrix = resultTransform(state, id);
+      const matrix = resultTransform(state, id, t2Scale);
       if (!matrix || !images.t2.src || !canExportT1) continue;
-      await exportAlignedImage(images.t2.src, `${baseName(images.t2.name)}-aligned-${FILE_SLUGS[id]}.png`, matrix, images.t1, pxPerMm);
+      await exportAlignedImage(images.t2.src, `${baseName(images.t2.name)}-aligned-${FILE_SLUGS[id]}.png`, matrix, t1FrameSize, pxPerMm);
     }
   });
 
@@ -177,7 +217,10 @@ export function useWorkspace() {
       t1Name: images.t1.name,
       t2Name: images.t2.name,
       pxPerMm,
-      calibrationSource: calibration.label,
+      calibration: {
+        t1: { scale: calibration.calibration.t1.scale, source: sourceLabel(calibration.calibration.t1.source) },
+        t2: { scale: calibration.calibration.t2.scale, source: sourceLabel(calibration.calibration.t2.source) },
+      },
       preprocessMode: effectivePreprocessMode,
       version: __APP_VERSION__,
       exportedAt: new Date(),
@@ -245,7 +288,13 @@ export function useWorkspace() {
     hasImages: imageLoader.hasImages,
     hasImageGeometry: imageLoader.hasGeometry,
     claheReady: imageLoader.claheReady,
-    calibration,
+    calibration: calibration.calibration,
+    pxPerMm,
+    calibrationNotes,
+    paneNotes,
+    t1Scale,
+    t1FrameSize,
+    t2FrameSize,
     workflow: state,
     stageId,
     stageDef: def,
@@ -297,8 +346,17 @@ export function useWorkspace() {
         setPreprocessModeState(mode);
         dispatch({ type: 'clearRuns' });
       },
-      setManualCalibration: (value: number) => {
-        calibration.setManual(value);
+      // Calibration changes discard all runs.
+      setCalibration: (keys: readonly ImageKey[], scale: Partial<PixelScale>) => {
+        calibration.setManual(keys, scale);
+        dispatch({ type: 'clearRuns' });
+      },
+      copyT1CalibrationToT2: () => {
+        calibration.copyT1ToT2();
+        dispatch({ type: 'clearRuns' });
+      },
+      resetCalibration: () => {
+        calibration.reset(resolutions);
         dispatch({ type: 'clearRuns' });
       },
       toggleAnnotations: () => setShowAnnotations((value) => !value),

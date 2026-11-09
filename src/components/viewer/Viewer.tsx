@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 import type { OverlayMode } from '@/lib/settings';
 import type { LandmarkMeta } from '@/lib/stages';
-import type { Affine6, ImageKey, ImagePair, LandmarkDraft, LandmarkKey, PlacementArcGuide, Point, RoiConfig } from '@/types';
-import { CephPane, FALLBACK_IMAGE_SIZE } from './CephPane';
+import type { Affine6, ImageKey, ImagePair, ImageSize, LandmarkDraft, LandmarkKey, PlacementArcGuide, Point, RoiConfig } from '@/types';
+import { CephPane } from './CephPane';
 import { OverlayPane } from './OverlayPane';
 
 type ViewerProps = {
@@ -10,11 +10,19 @@ type ViewerProps = {
   // Landmarks in native image pixels.
   points: LandmarkDraft;
   roi: RoiConfig;
+  // Scale of the alignment frame, which both panes show.
   pxPerMm: number;
+  // Native T1 → alignment frame, or null when T1 is shown as it is.
+  t1Transform: Affine6 | null;
+  t1FrameSize: ImageSize;
+  // Size of T2's frame when t2Transform is set.
+  t2FrameSize: ImageSize;
+  // Calibration shown in the corner of each pane.
+  paneNotes: Record<ImageKey, string>;
   singlePoint: boolean;
   isOverlayPhase: boolean;
   overlayMode: OverlayMode;
-  // Native T2 → T1, or null to show T2 as it is.
+  // Native T2 → its displayed frame, or null to show T2 as it is.
   t2Transform: Affine6 | null;
   showAnnotations: boolean;
   strobeFrame: 't1' | 't2';
@@ -31,20 +39,15 @@ type ViewerProps = {
 
 // Two side-by-side panes while placing landmarks, the overlay once aligned.
 export function Viewer({
-  images, points, roi, pxPerMm, singlePoint, isOverlayPhase, overlayMode, t2Transform, showAnnotations,
+  images, points, roi, pxPerMm, t1Transform, t1FrameSize, t2FrameSize, paneNotes, singlePoint, isOverlayPhase, overlayMode, t2Transform, showAnnotations,
   strobeFrame, opacity, placing, placementGuide, onPlace, onFileDrop, children,
 }: ViewerProps) {
   const hasImages = !!(images.t1.src && images.t2.src);
   const showOverlay = isOverlayPhase && overlayMode !== 'side' && hasImages;
-  const t1Size = {
-    width: images.t1.width ?? FALLBACK_IMAGE_SIZE.width,
-    height: images.t1.height ?? FALLBACK_IMAGE_SIZE.height,
-  };
 
   const pane = (image: ImageKey) => {
     const active = placing?.image === image;
-    // A transformed T2 is shown in T1's frame.
-    const matrix = image === 't2' ? t2Transform : null;
+    const matrix = image === 't1' ? t1Transform : t2Transform;
     return (
       <CephPane
         showAnnotations={!isOverlayPhase || showAnnotations}
@@ -60,7 +63,8 @@ export function Viewer({
         showVector={!!(points[image].rp1 && points[image].rp2)}
         singlePoint={singlePoint}
         affineMatrix={matrix}
-        frameSize={matrix ? t1Size : null}
+        frameSize={matrix ? (image === 't1' ? t1FrameSize : t2FrameSize) : null}
+        cornerNote={paneNotes[image]}
         onPlace={(key, point) => onPlace(image, key, point)}
         onFileDrop={(file) => onFileDrop(image, file)}
         placementGuide={image === 't2' ? placementGuide : null}
@@ -77,6 +81,8 @@ export function Viewer({
           points={points}
           roi={roi}
           singlePoint={singlePoint}
+          t1Transform={t1Transform}
+          frameSize={t1FrameSize}
           t2Transform={t2Transform}
           showAnnotations={showAnnotations}
           strobeFrame={strobeFrame}

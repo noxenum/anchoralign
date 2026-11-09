@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  readImageResolution, nextCalibration, calibrationWarnings, calibrationLabel,
-  dpiToPxPerMm, pxPerMmToDpi, type ImageResolution,
-} from './imageResolution';
+import { readImageResolution, dpiToPxPerMm, pxPerMmToDpi } from './imageResolution';
 
 function bytes(...parts: (number[] | Uint8Array | string)[]): ArrayBuffer {
   const out: number[] = [];
@@ -94,39 +91,5 @@ describe('image resolution metadata', () => {
   it('round-trips dpi and px/mm', () => {
     expect(dpiToPxPerMm(206)).toBeCloseTo(8.1102, 4);
     expect(pxPerMmToDpi(dpiToPxPerMm(206))).toBeCloseTo(206, 10);
-  });
-});
-
-describe('calibration source', () => {
-  const res = (dpi: number, placeholder = false): ImageResolution => ({ dpiX: dpi, dpiY: dpi, pxPerMm: dpi / 25.4, tag: 'EXIF', placeholder });
-
-  it('prefers T1 metadata, then T2, and never overrides a manual value', () => {
-    expect(nextCalibration({ kind: 'default' }, { t2: res(150) })).toMatchObject({ kind: 'metadata', image: 't2' });
-    expect(nextCalibration({ kind: 'default' }, { t1: res(206), t2: res(150) })).toMatchObject({ kind: 'metadata', image: 't1' });
-    expect(nextCalibration({ kind: 'default' }, { t1: res(72, true), t2: res(150) })).toMatchObject({ kind: 'metadata', image: 't2' });
-    expect(nextCalibration({ kind: 'manual' }, { t1: res(206) })).toEqual({ kind: 'manual' });
-  });
-
-  it('keeps a metadata value when the source image is replaced without metadata', () => {
-    const fromT1 = nextCalibration({ kind: 'default' }, { t1: res(206) });
-    expect(nextCalibration(fromT1, { t1: null })).toEqual({ kind: 'kept' });
-    expect(nextCalibration({ kind: 'default' }, { t1: null })).toEqual({ kind: 'default' });
-  });
-
-  it('labels the source and warns about mismatches and placeholders', () => {
-    const source = nextCalibration({ kind: 'default' }, { t1: res(206) });
-    expect(calibrationLabel(source)).toBe('EXIF T1');
-    expect(calibrationWarnings(206 / 25.4, source, { t1: res(206) }, true)).toEqual([]);
-
-    const mixed = calibrationWarnings(206 / 25.4, source, { t1: res(206), t2: res(150) }, true);
-    expect(mixed).toHaveLength(2);
-    expect(mixed[0]).toContain('T2 metadata says 150 dpi');
-
-    expect(calibrationWarnings(4.2, { kind: 'default' }, { t1: res(72, true) }, true)[0]).toContain('72 dpi ignored');
-    expect(calibrationWarnings(4.2, { kind: 'default' }, {}, false)).toEqual([]);
-
-    const rounded = { ...res(206), dpiX: 205.98 };
-    expect(calibrationWarnings(rounded.pxPerMm, source, { t1: rounded }, true)).toEqual([]);
-    expect(calibrationWarnings(206 / 25.4, source, { t1: { ...res(206), dpiY: 150 } }, true)[0]).toContain('non-square');
   });
 });

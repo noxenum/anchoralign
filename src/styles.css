@@ -255,6 +255,37 @@ button, input { font: inherit; color: inherit; }
 }
 .field.warn { border-color: color-mix(in oklch, var(--warn) 60%, var(--border-1)); color: var(--warn); }
 .calibration { display: flex; align-items: center; gap: 4px; }
+.calibration .icon-btn { width: 24px; }
+.calibration-summary { cursor: pointer; font-family: var(--font-mono); font-size: 12px; color: var(--fg-0); white-space: nowrap; }
+.calibration-summary.warn { color: var(--warn); }
+
+/* Per-image calibration panel below the header field. */
+.calibration-panel {
+  width: 340px;
+  padding: 12px 14px 14px;
+  background: var(--bg-1);
+  border: 1px solid var(--border-2);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-pop);
+  animation: pop-in .1s ease-out;
+}
+.calibration-panel-h {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+}
+.calibration-panel-h .h-meta { font-family: var(--font-mono); font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--fg-4); }
+.calibration-grid { display: grid; grid-template-columns: auto 1fr 1fr auto; gap: 6px 8px; align-items: center; }
+.calibration-grid .col-h { font-size: 10.5px; color: var(--fg-4); }
+.calibration-grid .field { width: 100%; }
+.calibration-grid .field input { width: 100%; }
+.calibration-source { min-width: 56px; font-family: var(--font-mono); font-size: 11px; color: var(--fg-2); }
+.calibration-actions { display: flex; gap: 6px; margin-top: 12px; }
 
 input[type="range"] {
   --fill: 50%;

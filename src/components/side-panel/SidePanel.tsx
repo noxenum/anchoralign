@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ChartLine, ClipboardList, History, RotateCcw, ScanSearch, SlidersHorizontal } from 'lucide-react';
 import { InfoTip } from '@/components/common/Tooltip';
 import { HELP } from '@/components/helpText';
+import type { Calibration, CalibrationUnit } from '@/lib/calibration';
 import type { Settings } from '@/lib/settings';
 import { STAGE_IDS, stageDef, type AlignmentParams, type StageDef, type StageId } from '@/lib/stages';
 import type { StagePhase, WorkflowState } from '@/lib/workflow';
@@ -46,7 +47,8 @@ type SidePanelProps = {
   results: AlignmentResult | null;
   images: ImagePair;
   pxPerMm: number;
-  calibrationLabel: string;
+  calibration: Calibration;
+  calibrationUnit: CalibrationUnit;
   calibrationWarnings: string[];
   preprocessMode: PreprocessMode;
   onPreprocessModeChange: (mode: PreprocessMode) => void;
@@ -58,7 +60,7 @@ type SidePanelProps = {
 
 export function SidePanel({
   workflow, stage, phase, running, allDone, settings, updateSettings, onParamsChange, onRestoreDefaults,
-  roi, preAlign, iterations, results, images, pxPerMm, calibrationLabel, calibrationWarnings, preprocessMode,
+  roi, preAlign, iterations, results, images, pxPerMm, calibration, calibrationUnit, calibrationWarnings, preprocessMode,
   onPreprocessModeChange, preprocessDisabled, claheReady, exports, onReset,
 }: SidePanelProps) {
   const [tab, setTab] = useState<Tab>('settings');
@@ -93,7 +95,9 @@ export function SidePanel({
         ))}
       </div>
 
-      {tab !== 'results' && (
+      {/* The active stage. Hidden where the tab names its own stage: the
+          settings show any stage and the results cover all of them. */}
+      {tab !== 'results' && tab !== 'settings' && (
         <div className="side-header">
           <span className="side-header-name">{stage.name}</span>
           <span className={`phase-badge ${phase}`}>{PHASE_LABELS[phase]}</span>
@@ -111,7 +115,8 @@ export function SidePanel({
             results={results}
             images={images}
             pxPerMm={pxPerMm}
-            calibrationLabel={calibrationLabel}
+            calibration={calibration}
+            calibrationUnit={calibrationUnit}
             calibrationWarnings={calibrationWarnings}
             preprocessMode={preprocessMode}
           />
